@@ -144,27 +144,46 @@ exports.getReport = async (req, res) => {
     const avgClarity = answered.length > 0 ? (answered.reduce((a, q) => a + q.clarityScore, 0) / answered.length).toFixed(1) : 0;
     const avgPS      = answered.length > 0 ? (answered.reduce((a, q) => a + q.problemSolvingScore, 0) / answered.length).toFixed(1) : 0;
 
-    interview.totalScore        = avgScore;
-    interview.technicalScore    = avgTech;
-    interview.clarityScore      = avgClarity;
-    interview.problemSolvingScore = avgPS;
-    interview.completed         = true;
-
-    if (!interview.improvementRoadmap && answered.length > 0) {
-      interview.improvementRoadmap = await generateRoadmap(answered);
+    let roadmap = interview.improvementRoadmap;
+    if (!roadmap && answered.length > 0) {
+      roadmap = await generateRoadmap(answered);
     }
+
+    let coachingReportData = {
+      coachingReport: interview.coachingReport || '',
+      strongPoints: interview.strongPoints || [],
+      improvementAreas: interview.improvementAreas || [],
+      suggestedResources: interview.suggestedResources || []
+    };
 
     // Generate coaching report if not already done
     if (!interview.coachingReport && answered.length > 0) {
       const coaching = await generateCoachingReport(answered, interview.persona || 'Technical');
-      interview.coachingReport      = coaching.coachingReport || '';
-      interview.strongPoints        = coaching.strongPoints || [];
-      interview.improvementAreas    = coaching.improvementAreas || [];
-      interview.suggestedResources  = coaching.suggestedResources || [];
+      coachingReportData = {
+        coachingReport: coaching.coachingReport || '',
+        strongPoints: coaching.strongPoints || [],
+        improvementAreas: coaching.improvementAreas || [],
+        suggestedResources: coaching.suggestedResources || []
+      };
     }
 
-    await interview.save();
-    res.json({ interview, questions });
+    const updatedInterview = await Interview.findByIdAndUpdate(
+      req.params.interviewId,
+      {
+        $set: {
+          totalScore: avgScore,
+          technicalScore: avgTech,
+          clarityScore: avgClarity,
+          problemSolvingScore: avgPS,
+          completed: true,
+          improvementRoadmap: roadmap,
+          ...coachingReportData
+        }
+      },
+      { returnDocument: 'after' }
+    ).populate('resumeId');
+
+    res.json({ interview: updatedInterview, questions });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error generating report' });

@@ -45,7 +45,7 @@ const Navbar = () => {
                             <BrainCircuit className="w-6 h-6 text-primary" />
                         </motion.div>
                         <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
-                            InterviewAI
+                            Prepvox
                         </span>
                     </Link>
 

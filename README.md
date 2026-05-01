@@ -1,4 +1,4 @@
-# AI Interview Agent
+# Prepvox
 
 An AI-powered Mock Interview Platform built with the MERN stack and Google Gemini AI.
 Upload your resume, trigger an interview session with tailored technical questions, and get precise AI feedback.

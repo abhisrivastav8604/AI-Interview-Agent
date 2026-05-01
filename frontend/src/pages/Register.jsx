@@ -58,7 +58,7 @@ const Register = () => {
                         <div className="p-2 bg-primary/10 rounded-xl border border-primary/20">
                             <Bot className="w-7 h-7 text-primary" />
                         </div>
-                        <span className="text-xl font-bold">InterviewAI</span>
+                        <span className="text-xl font-bold">Prepvox</span>
                     </div>
                     <h2 className="text-4xl font-extrabold mb-4 leading-tight">
                         Your AI Interview<br />
@@ -97,7 +97,7 @@ const Register = () => {
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-1 md:hidden">
                             <Bot className="w-6 h-6 text-primary" />
-                            <span className="text-lg font-bold">InterviewAI</span>
+                            <span className="text-lg font-bold">Prepvox</span>
                         </div>
                         <h2 className="text-2xl font-extrabold mb-1">Create Free Account</h2>
                         <p className="text-textMuted mb-6 text-sm">Start crushing interviews today — no credit card needed</p>

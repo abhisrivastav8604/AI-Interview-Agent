@@ -54,7 +54,7 @@ const Login = () => {
                     <div className="p-2 bg-primary/10 rounded-xl border border-primary/20">
                         <Bot className="w-7 h-7 text-primary" />
                     </div>
-                    <span className="text-xl font-bold">InterviewAI</span>
+                    <span className="text-xl font-bold">Prepvox</span>
                 </motion.div>
 
                 <motion.div

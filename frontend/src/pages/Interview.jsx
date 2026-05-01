@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import * as faceapi from 'face-api.js';
 import Editor from '@monaco-editor/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -81,6 +82,7 @@ const Interview = () => {
   const [isListening, setIsListening]   = useState(false);
   const [isCompleted, setIsCompleted]   = useState(false);
   const [tab, setTab]                   = useState('text'); // text | code
+  const [isAvatarSpeaking, setIsAvatarSpeaking] = useState(false);
 
   // Memory panel
   const [memory, setMemory]             = useState([]); // [{q, summary}]
@@ -90,6 +92,9 @@ const Interview = () => {
   const [camError, setCamError]         = useState('');
   const [camStream, setCamStream]       = useState(null);
   const [camLoading, setCamLoading]     = useState(false);
+  const [faceModelsLoaded, setFaceModelsLoaded] = useState(false);
+  const [expressions, setExpressions]   = useState(null);
+  const trackingIntervalRef             = useRef(null);
 
   // Advanced
   const [hint, setHint]                 = useState('');
@@ -98,15 +103,59 @@ const Interview = () => {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [notes, setNotes]               = useState('');
   const [fullscreen, setFullscreen]     = useState(false);
+  const [codeOutput, setCodeOutput]     = useState('');
+  const [isExecuting, setIsExecuting]   = useState(false);
 
   const recognitionRef = useRef(null);
   const webcamRef      = useRef(null);
   const streamRef      = useRef(null);
   const containerRef   = useRef(null);
   const timerRef       = useRef(null);
+  const avatarVideoRef = useRef(null);
 
   const personaMeta = PERSONA_META[persona] || PERSONA_META.Technical;
   const PersonaIcon = personaMeta.icon;
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const timerPct    = (timeLeft / 120) * 100;
+  const timerColor  = timeLeft > 60 ? '#10B981' : timeLeft > 30 ? '#FBBF24' : '#EF4444';
+  const wordCount   = getWordCount(tab === 'code' ? userCode : answer);
+  const quality     = getQuality(wordCount);
+  const textAnalysis= analyzeText(answer);
+  const progress    = (currentIndex / questions.length) * 100;
+  const currentQ    = questions[currentIndex];
+  const qTips       = QUESTION_TIPS[currentQ?.questionType] || QUESTION_TIPS.Technical;
+
+  // ── Avatar Logic ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (questions.length > 0 && currentQ && !isCompleted && !loading) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(currentQ.questionText);
+        msg.rate = 0.95;
+        msg.pitch = 1.0;
+        
+        msg.onstart = () => setIsAvatarSpeaking(true);
+        msg.onend = () => setIsAvatarSpeaking(false);
+        msg.onerror = () => setIsAvatarSpeaking(false);
+        
+        setTimeout(() => window.speechSynthesis.speak(msg), 400);
+      }
+    }
+    return () => {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    };
+  }, [currentIndex, currentQ, questions.length, isCompleted, loading]);
+
+  useEffect(() => {
+    if (avatarVideoRef.current) {
+      if (isAvatarSpeaking) {
+        avatarVideoRef.current.play().catch(()=>{});
+      } else {
+        avatarVideoRef.current.pause();
+      }
+    }
+  }, [isAvatarSpeaking]);
 
   // ── Fetch questions ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -164,7 +213,23 @@ const Interview = () => {
     else setTab('text');
   }, [currentIndex, questions]);
 
-  // ── Camera ─────────────────────────────────────────────────────────────
+  // ── Camera & Face API ────────────────────────────────────────────────────
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const url = 'https://vladmandic.github.io/face-api/model/';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(url),
+          faceapi.nets.faceExpressionNet.loadFromUri(url)
+        ]);
+        setFaceModelsLoaded(true);
+      } catch (err) {
+        console.error('Error loading face-api models', err);
+      }
+    };
+    loadModels();
+  }, []);
+
   const startWebcam = async () => {
     setCamLoading(true); setCamError('');
     try {
@@ -179,9 +244,31 @@ const Interview = () => {
   const stopWebcam = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null; setCamStream(null); setCamEnabled(false);
+    if (trackingIntervalRef.current) clearInterval(trackingIntervalRef.current);
+    setExpressions(null);
   }, []);
 
   const toggleWebcam = () => camEnabled ? stopWebcam() : startWebcam();
+  
+  // ── Face Tracking Loop ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (camEnabled && faceModelsLoaded && webcamRef.current) {
+      trackingIntervalRef.current = setInterval(async () => {
+        if (!webcamRef.current) return;
+        const detections = await faceapi.detectSingleFace(
+          webcamRef.current, 
+          new faceapi.TinyFaceDetectorOptions({ inputSize: 160 })
+        ).withFaceExpressions();
+        if (detections && detections.expressions) {
+          const exps = Object.entries(detections.expressions);
+          const topExp = exps.reduce((a, b) => a[1] > b[1] ? a : b);
+          setExpressions(topExp); // [expressionName, probability]
+        }
+      }, 800);
+    }
+    return () => clearInterval(trackingIntervalRef.current);
+  }, [camEnabled, faceModelsLoaded]);
+
   const toggleListening = () => {
     if (isListening) { recognitionRef.current?.stop(); setIsListening(false); }
     else { recognitionRef.current?.start(); setIsListening(true); }
@@ -200,6 +287,20 @@ const Interview = () => {
     } catch { setHint('Structure your answer with a clear intro, examples, and conclusion.'); setShowHint(true); }
     finally { setHintLoading(false); }
   };
+
+  // ── Adaptive "Panic" Detection ──────────────────────────────────────────
+  useEffect(() => {
+    if (tab === 'text' && isListening && answer.length > 30) {
+      const lower = answer.toLowerCase();
+      const panicWords = ['i don\'t know', "i'm not sure", 'i forget', "i'm stuck", 'can you help'];
+      const hasPanic = panicWords.some(w => lower.includes(w));
+      const stats = analyzeText(answer);
+      
+      if ((hasPanic || stats.fillers.length > 6) && !showHint && !hintLoading) {
+        fetchHint();
+      }
+    }
+  }, [answer, isListening, showHint, hintLoading, tab]);
 
   // ── Adaptive Follow-up ────────────────────────────────────────────────────
   const requestFollowUp = async () => {
@@ -221,6 +322,27 @@ const Interview = () => {
       });
     } catch { setError('Could not generate follow-up question.'); }
     finally { setFollowUpLoading(false); }
+  };
+
+  // ── Code Execution (Piston API) ─────────────────────────────────────────
+  const handleRunCode = async () => {
+    setIsExecuting(true);
+    setCodeOutput('Running...\n');
+    let language = currentQ?.codeLanguage || 'javascript';
+    if (language === 'nodejs') language = 'javascript'; // Fix language mapping if needed
+    
+    try {
+      const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
+        language: language,
+        version: '*',
+        files: [{ content: userCode }]
+      });
+      setCodeOutput(response.data.run.output || 'No output.');
+    } catch (err) {
+      setCodeOutput('Error executing code: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -255,16 +377,6 @@ const Interview = () => {
     if (!document.fullscreenElement) containerRef.current?.requestFullscreen().then(() => setFullscreen(true)).catch(()=>{});
     else document.exitFullscreen().then(() => setFullscreen(false)).catch(()=>{});
   };
-
-  // ── Derived ───────────────────────────────────────────────────────────────
-  const timerPct    = (timeLeft / 120) * 100;
-  const timerColor  = timeLeft > 60 ? '#10B981' : timeLeft > 30 ? '#FBBF24' : '#EF4444';
-  const wordCount   = getWordCount(tab === 'code' ? userCode : answer);
-  const quality     = getQuality(wordCount);
-  const textAnalysis= analyzeText(answer);
-  const progress    = (currentIndex / questions.length) * 100;
-  const currentQ    = questions[currentIndex];
-  const qTips       = QUESTION_TIPS[currentQ?.questionType] || QUESTION_TIPS.Technical;
 
   // ─────────────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -435,7 +547,17 @@ const Interview = () => {
               <div className="grid grid-cols-2 gap-3">
                 {/* AI */}
                 <div className="relative rounded-xl overflow-hidden bg-black/40 border border-white/10" style={{aspectRatio:'4/3'}}>
-                  <img src={aiAvatar} alt="AI" className="w-full h-full object-cover" />
+                  <video 
+                    ref={avatarVideoRef}
+                    loop 
+                    muted 
+                    playsInline 
+                    poster={aiAvatar}
+                    className="w-full h-full object-cover"
+                    style={{ filter: isListening ? 'brightness(0.5)' : 'brightness(1)' }}
+                  >
+                    <source src="https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-a-video-call-43187-large.mp4" type="video/mp4" />
+                  </video>
                   <motion.div className="absolute inset-0"
                     animate={{boxShadow: isListening ? 'inset 0 0 30px rgba(99,102,241,0.4)' : 'inset 0 0 0 rgba(0,0,0,0)'}}
                     transition={{duration:0.4}} />
@@ -546,24 +668,38 @@ const Interview = () => {
                     onChange={e => setAnswer(e.target.value)} disabled={submitting} />
                 </motion.div>
               ) : (
-                <motion.div key="code" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <motion.div key="code" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex flex-col">
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-black/20">
                     <Code2 className="w-3.5 h-3.5 text-blue-400" />
                     <span className="text-xs text-blue-300 font-mono font-semibold">{currentQ?.codeLanguage || 'javascript'}</span>
-                    <span className="ml-auto text-xs text-textMuted">Write your solution below</span>
+                    <button onClick={handleRunCode} disabled={isExecuting} className="ml-auto flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all rounded text-xs font-semibold border border-emerald-500/40">
+                      {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Zap className="w-3 h-3" />}
+                      Run Code
+                    </button>
                   </div>
-                  <Editor
-                    height="220px"
-                    language={currentQ?.codeLanguage || 'javascript'}
-                    value={userCode}
-                    onChange={v => setUserCode(v || '')}
-                    theme="vs-dark"
-                    options={{
-                      fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false,
-                      padding: { top: 12 }, lineNumbers: 'on', automaticLayout: true,
-                      fontFamily: '"Fira Code", "JetBrains Mono", monospace', fontLigatures: true
-                    }}
-                  />
+                  <div className="flex flex-col border-b border-white/10">
+                    <Editor
+                      height="200px" // Adjusted height to fit terminal
+                      language={currentQ?.codeLanguage || 'javascript'}
+                      value={userCode}
+                      onChange={v => setUserCode(v || '')}
+                      theme="vs-dark"
+                      options={{
+                        fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false,
+                        padding: { top: 12 }, lineNumbers: 'on', automaticLayout: true,
+                        fontFamily: '"Fira Code", "JetBrains Mono", monospace'
+                      }}
+                    />
+                    <div className="h-32 bg-black/80 p-3 overflow-y-auto font-mono text-xs border-t border-white/5">
+                      <div className="flex items-center justify-between text-textMuted mb-2 border-b border-white/10 pb-1">
+                        <span>Terminal Output</span>
+                        {codeOutput && <span className="text-emerald-400 text-[9px] uppercase tracking-wider">Executed</span>}
+                      </div>
+                      <pre className={`${codeOutput.includes('Error') ? 'text-red-400' : 'text-emerald-300'} whitespace-pre-wrap leading-relaxed`}>
+                        {codeOutput || '> Ready for execution. Click "Run Code"'}
+                      </pre>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -615,7 +751,7 @@ const Interview = () => {
             {tab === 'text' && (
               <div className="mb-4">
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-textMuted">Confidence Tone</span>
+                  <span className="text-textMuted">Tone Confidence</span>
                   <SentimentBadge label={textAnalysis.label} />
                 </div>
                 <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
@@ -623,6 +759,26 @@ const Interview = () => {
                     animate={{width:`${textAnalysis.confidence}%`}} transition={{duration:0.4}} />
                 </div>
                 <p className="text-[10px] text-textMuted mt-1">{textAnalysis.confidence}% confidence score</p>
+              </div>
+            )}
+
+            {/* AI Facial Expression Track */}
+            {camEnabled && faceModelsLoaded && expressions && (
+              <div className="mb-4 bg-white/[0.03] p-3 rounded-xl border border-white/5">
+                <div className="flex justify-between text-xs mb-1.5 items-center">
+                  <span className="text-textMuted flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" /> Facial State</span>
+                  <span className={`font-bold capitalize ${expressions[0] === 'happy' ? 'text-emerald-400' : expressions[0] === 'neutral' ? 'text-white/80' : 'text-amber-400'}`}>
+                    {expressions[0]}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
+                  <motion.div 
+                    className="h-full rounded-full absolute left-0 top-0"
+                    style={{ background: expressions[0] === 'happy' ? '#10B981' : expressions[0] === 'neutral' ? '#9CA3AF' : '#F59E0B' }}
+                    animate={{width:`${expressions[1]*100}%`}} 
+                    transition={{duration:0.3}} 
+                  />
+                </div>
               </div>
             )}
 

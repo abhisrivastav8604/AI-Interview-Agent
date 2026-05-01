@@ -1,11 +1,13 @@
 {
-  "name": "ai-interview-agent",
+  "name": "prepvox",
   "version": "1.0.0",
-  "description": "AI Interview Agent Monorepo Setup",
+  "description": "Prepvox Monorepo Setup",
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix frontend",
-    "dev": "start \"AI Backend\" cmd /k \"npm.cmd run dev --prefix backend\" && start \"AI Frontend\" cmd /k \"npm.cmd run dev --prefix frontend\"",
-    "start": "start \"AI Backend\" cmd /k \"npm.cmd start --prefix backend\" && start \"AI Frontend\" cmd /k \"npm.cmd run preview --prefix frontend\""
+
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+
+    "start": "npm run start --prefix backend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

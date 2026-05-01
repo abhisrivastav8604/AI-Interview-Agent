@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, FileText, Bot, Loader2, Coins, ShoppingCart, AlertTriangle, CheckCircle2, Zap, History, TrendingUp, Clock, BarChart2, ArrowRight } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuthContext } from '../context/AuthContext';
 import { buildApiUrl } from '../lib/api';
 
@@ -112,6 +113,11 @@ const Dashboard = () => {
     const bestScore = history.length > 0
         ? Math.max(...history.map(i => parseFloat(i.totalScore || 0))).toFixed(1)
         : '—';
+
+    const chartData = [...history].reverse().map((h, i) => ({
+        name: `Int ${i + 1}`,
+        score: parseFloat(h.totalScore || 0)
+    }));
 
     return (
         <div className="max-w-6xl mx-auto w-full px-4 py-8">
@@ -264,6 +270,40 @@ const Dashboard = () => {
                     )}
                 </motion.div>
             </div>
+
+            {/* Growth Tracking Chart */}
+            {history.length >= 2 && (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.25 }}
+                    className="glass-panel p-6 mb-8 relative overflow-hidden"
+                >
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/10 blur-3xl rounded-full" />
+                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2 relative z-10">
+                        <TrendingUp className="w-5 h-5 text-secondary" /> Performance Growth
+                    </h3>
+                    <div className="h-64 w-full relative z-10">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <defs>
+                                    <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} domain={[0, 10]} />
+                                <Tooltip 
+                                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                                    itemStyle={{ color: '#10B981' }}
+                                />
+                                <Area type="monotone" dataKey="score" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </motion.div>
+            )}
 
             {/* Interview History */}
             <motion.div

@@ -1,7 +1,7 @@
 @echo off
-title AI INTERVIEW AGENT Server
+title Prepvox Server
 echo ==========================================
-echo Starting AI INTERVIEW AGENT (1-Click Fix)
+echo Starting Prepvox (1-Click Fix)
 echo ==========================================
 echo.
 echo Please DO NOT close this window! A web server must stay open.

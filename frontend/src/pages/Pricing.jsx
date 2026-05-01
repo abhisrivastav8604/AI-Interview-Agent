@@ -78,7 +78,7 @@ const Pricing = () => {
                 key: RAZORPAY_KEY_ID,
                 amount,
                 currency,
-                name: 'InterviewAI',
+                name: 'Prepvox',
                 description: `${pack.name} Pack - ${pack.credits} Credits`,
                 order_id: orderId,
                 handler: async (response) => {
