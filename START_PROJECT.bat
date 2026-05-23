@@ -1,29 +1,39 @@
 @echo off
 title Prepvox Server
 echo ==========================================
-echo Starting Prepvox (1-Click Fix)
+echo   Starting Prepvox AI Interview Agent
 echo ==========================================
 echo.
-echo Please DO NOT close this window! A web server must stay open.
-echo.
+
 cd /d "%~dp0"
 
-tasklist /FI "IMAGENAME eq mongod.exe" | find /I "mongod.exe" >nul
-if errorlevel 1 (
-  echo [-] Starting Local Database quietly...
-  start /B .\local-mongo\extracted\mongodb-win32-x86_64-windows-7.0.5\bin\mongod.exe --dbpath "%~dp0local-mongo\data" --logpath "%~dp0local-mongo\log\mongo.log" --bind_ip 127.0.0.1 2>nul
-  echo [+] Local Database started!
-) else (
-  echo [+] Local Database is already running.
+REM ── Kill any old processes on port 5000 to avoid conflicts ──
+echo [*] Clearing port 5000 if busy...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000 " 2^>nul') do (
+    taskkill /PID %%a /F >nul 2>&1
 )
 
 echo.
-echo [+] Launching Backend and Frontend (this takes a few seconds)...
+echo [+] Starting Backend (port 5000)...
+start "Prepvox Backend" /D "%~dp0backend" cmd /k "echo Backend starting... && npm run dev"
+
+echo [*] Waiting 5 seconds for backend to start...
+timeout /t 5 /nobreak >nul
+
+echo [+] Starting Frontend...
+start "Prepvox Frontend" /D "%~dp0frontend" cmd /k "echo Frontend starting... && npm run dev"
+
 echo.
-start "AI Backend" /D "%~dp0backend" cmd /k "npm.cmd run dev"
-start "AI Frontend" /D "%~dp0frontend" cmd /k "npm.cmd run dev"
-
-echo [+] Backend and frontend launched in separate windows.
-
+echo ==========================================
+echo  [+] Both servers are launching!
+echo  [+] Backend  → http://localhost:5000
+echo  [+] Frontend → http://localhost:5173
+echo.
+echo  IMPORTANT: Keep both terminal windows open!
+echo  If you see "Cannot connect to localhost":
+echo    1. Make sure the Backend window shows
+echo       "Server started on port 5000"
+echo    2. Then refresh your browser
+echo ==========================================
 echo.
 pause
