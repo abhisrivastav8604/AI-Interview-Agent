@@ -55,6 +55,20 @@ const Pricing = () => {
     const [processingPack, setProcessingPack] = useState(null);
     const [success, setSuccess] = useState('');
 
+    const loadRazorpayScript = () => {
+        return new Promise((resolve) => {
+            if (window.Razorpay) {
+                resolve(true);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+    };
+
     const handleBuy = async (pack) => {
         if (!user) {
             navigate('/login');
@@ -65,6 +79,14 @@ const Pricing = () => {
         const token = localStorage.getItem('token');
 
         try {
+            // Ensure Razorpay SDK is loaded
+            const sdkLoaded = await loadRazorpayScript();
+            if (!sdkLoaded || !window.Razorpay) {
+                alert('Failed to load payment gateway. Please check your internet connection and try again.');
+                setProcessingPack(null);
+                return;
+            }
+
             // Create Razorpay order
             const orderRes = await axios.post(
                 buildApiUrl('/api/payment/create-order'),
@@ -96,7 +118,7 @@ const Pricing = () => {
                         await refreshCredits();
                         setSuccess(`🎉 ${verifyRes.data.message} You now have ${verifyRes.data.credits} credits.`);
                     } catch {
-                        alert('Payment verification failed. Please contact support.');
+                        alert('Payment was received but verification failed. Please contact support with your payment ID: ' + response.razorpay_payment_id);
                     } finally {
                         setProcessingPack(null);
                     }
@@ -104,16 +126,36 @@ const Pricing = () => {
                 prefill: { email: user.email, name: user.name },
                 theme: { color: '#6366f1' },
                 modal: { ondismiss: () => setProcessingPack(null) },
+                notify: { sms: false, email: false },
+                // Handle payment failure inside the checkout
+                config: {
+                    display: {
+                        blocks: {
+                            banks: { name: 'Pay via UPI / Cards', instruments: [{ method: 'upi' }, { method: 'card' }, { method: 'netbanking' }] }
+                        },
+                        sequence: ['block.banks'],
+                        preferences: { show_default_blocks: true }
+                    }
+                }
             };
 
             const razorpayInstance = new window.Razorpay(options);
+
+            // Handle payment failures with clear message
+            razorpayInstance.on('payment.failed', (response) => {
+                console.error('Payment failed:', response.error);
+                alert(`Payment failed: ${response.error.description || 'Unknown error'}.\n\nIf using test mode, use card: 4111 1111 1111 1111, Expiry: any future date, CVV: any 3 digits.`);
+                setProcessingPack(null);
+            });
+
             razorpayInstance.open();
         } catch (err) {
             console.error('Payment error:', err);
-            alert(err.response?.data?.message || 'Failed to initiate payment.');
+            alert(err.response?.data?.message || 'Failed to initiate payment. Make sure the backend server is running.');
             setProcessingPack(null);
         }
     };
+
 
     return (
         <div className="max-w-6xl mx-auto w-full px-4 py-12">
@@ -153,6 +195,34 @@ const Pricing = () => {
                     {success}
                 </motion.div>
             )}
+
+            {/* Test Mode Notice — remove before going live */}
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-sm"
+            >
+                <p className="font-bold mb-2">⚠️ Test Mode — Use these test card details:</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                    <div className="bg-white/5 rounded-lg p-2">
+                        <p className="text-amber-300 mb-1 font-semibold">Card Number</p>
+                        <p>4111 1111 1111 1111</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-2">
+                        <p className="text-amber-300 mb-1 font-semibold">Expiry</p>
+                        <p>Any future date (e.g. 12/26)</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-2">
+                        <p className="text-amber-300 mb-1 font-semibold">CVV</p>
+                        <p>Any 3 digits (e.g. 123)</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-2">
+                        <p className="text-amber-300 mb-1 font-semibold">OTP</p>
+                        <p>Enter any OTP when prompted</p>
+                    </div>
+                </div>
+            </motion.div>
+
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {packs.map((pack, idx) => {

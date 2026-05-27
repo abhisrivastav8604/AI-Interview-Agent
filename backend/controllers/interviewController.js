@@ -26,7 +26,8 @@ exports.startInterview = async (req, res) => {
 
     const questionsList = await generateQuestions(resume.detectedSkills, persona);
     if (!questionsList || questionsList.length === 0) {
-      return res.status(400).json({ message: 'AI failed to generate questions. Verify your Gemini API key.' });
+      console.error('❌ generateQuestions returned empty. Skills:', resume.detectedSkills, 'Persona:', persona);
+      return res.status(400).json({ message: 'AI failed to generate questions. Please try again in a moment.' });
     }
 
     const questions = questionsList.map((q, idx) => ({

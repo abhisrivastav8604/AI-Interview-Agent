@@ -14,6 +14,11 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000 " 2^>nul') do (
 )
 
 echo.
+REM ── Start local MongoDB if not already running ──
+echo [*] Starting Local MongoDB...
+call "%~dp0start-mongo.bat"
+
+echo.
 echo [+] Starting Backend (port 5000)...
 start "Prepvox Backend" /D "%~dp0backend" cmd /k "echo Backend starting... && npm run dev"
 
