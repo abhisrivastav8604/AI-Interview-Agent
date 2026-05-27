@@ -126,7 +126,6 @@ const Pricing = () => {
                 prefill: { email: user.email, name: user.name },
                 theme: { color: '#6366f1' },
                 modal: { ondismiss: () => setProcessingPack(null) },
-                notify: { sms: false, email: false }
             };
 
             const razorpayInstance = new window.Razorpay(options);
@@ -193,7 +192,7 @@ const Pricing = () => {
                 className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-sm"
             >
                 <p className="font-bold mb-2">⚠️ Test Mode — Use these test card details:</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-mono">
                     <div className="bg-white/5 rounded-lg p-2">
                         <p className="text-amber-300 mb-1 font-semibold">Card Number</p>
                         <p>4111 1111 1111 1111</p>
@@ -208,7 +207,11 @@ const Pricing = () => {
                     </div>
                     <div className="bg-white/5 rounded-lg p-2">
                         <p className="text-amber-300 mb-1 font-semibold">OTP</p>
-                        <p>Enter any OTP when prompted</p>
+                        <p>Enter <strong>1234</strong> when prompted</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-2">
+                        <p className="text-amber-300 mb-1 font-semibold">UPI ID</p>
+                        <p>success@razorpay</p>
                     </div>
                 </div>
             </motion.div>

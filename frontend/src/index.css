@@ -108,3 +108,33 @@
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
 * { scroll-behavior: smooth; }
+
+/* ── Razorpay modal fix ─────────────────────────────────────────────────────
+   The app's global text color (#F1F5F9 – near-white) leaks into the Razorpay
+   checkout overlay and makes typed text invisible on light input backgrounds
+   (most visible on the UPI ID field). Force all text/inputs inside the
+   Razorpay container back to dark so they remain readable.
+   ────────────────────────────────────────────────────────────────────────── */
+.razorpay-container *,
+.razorpay-backdrop *,
+#razorpay-container *,
+#razorpay-backdrop * {
+  color: #111 !important;
+  caret-color: #111 !important;
+}
+
+.razorpay-container input,
+.razorpay-container textarea,
+.razorpay-container select,
+#razorpay-container input,
+#razorpay-container textarea,
+#razorpay-container select {
+  color: #111 !important;
+  background-color: #fff !important;
+  caret-color: #111 !important;
+}
+
+.razorpay-container input::placeholder,
+#razorpay-container input::placeholder {
+  color: #999 !important;
+}
