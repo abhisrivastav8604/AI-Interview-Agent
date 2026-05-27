@@ -126,17 +126,7 @@ const Pricing = () => {
                 prefill: { email: user.email, name: user.name },
                 theme: { color: '#6366f1' },
                 modal: { ondismiss: () => setProcessingPack(null) },
-                notify: { sms: false, email: false },
-                // Handle payment failure inside the checkout
-                config: {
-                    display: {
-                        blocks: {
-                            banks: { name: 'Pay via UPI / Cards', instruments: [{ method: 'upi' }, { method: 'card' }, { method: 'netbanking' }] }
-                        },
-                        sequence: ['block.banks'],
-                        preferences: { show_default_blocks: true }
-                    }
-                }
+                notify: { sms: false, email: false }
             };
 
             const razorpayInstance = new window.Razorpay(options);
