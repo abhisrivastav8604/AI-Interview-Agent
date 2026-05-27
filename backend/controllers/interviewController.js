@@ -181,7 +181,7 @@ exports.getReport = async (req, res) => {
           ...coachingReportData
         }
       },
-      { returnDocument: 'after' }
+      { new: true }
     ).populate('resumeId');
 
     res.json({ interview: updatedInterview, questions });
