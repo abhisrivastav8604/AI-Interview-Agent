@@ -6,9 +6,6 @@ const path = require('path');
 // 🔥 Load env
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
-// 🔍 Debug (remove later)
-console.log("MONGO_URI:", process.env.MONGO_URI);
-
 const connectDB = require('./config/db');
 
 const app = express();
@@ -22,11 +19,23 @@ process.on("unhandledRejection", (err) => {
   console.error("❌ UNHANDLED REJECTION:", err);
 });
 
+const allowedOrigins = ['http://localhost:5173', 'https://prepvox.com', process.env.FRONTEND_URL].filter(Boolean);
+
 // ✅ Middleware
 app.use(cors({
-  origin: true,
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
+
+// Add raw body parser for webhook BEFORE global express.json()
+const paymentController = require('./controllers/paymentController');
+app.post('/api/payment/webhook', express.raw({ type: 'application/json' }), paymentController.webhookHandler);
 
 app.use(express.json());
 

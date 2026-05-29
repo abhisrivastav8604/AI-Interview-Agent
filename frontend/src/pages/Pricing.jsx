@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Coins, Zap, Star, Crown, CheckCircle, Loader2, ShieldCheck } from 'lucide-react';
 import { useAuthContext } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { buildApiUrl } from '../lib/api';
@@ -51,6 +52,7 @@ const packs = [
 
 const Pricing = () => {
     const { user, refreshCredits } = useAuthContext();
+    const { addToast } = useToast();
     const navigate = useNavigate();
     const [processingPack, setProcessingPack] = useState(null);
     const [success, setSuccess] = useState('');
@@ -82,7 +84,7 @@ const Pricing = () => {
             // Ensure Razorpay SDK is loaded
             const sdkLoaded = await loadRazorpayScript();
             if (!sdkLoaded || !window.Razorpay) {
-                alert('Failed to load payment gateway. Please check your internet connection and try again.');
+                addToast('Failed to load payment gateway. Please check your internet connection and try again.', 'error');
                 setProcessingPack(null);
                 return;
             }
@@ -118,7 +120,7 @@ const Pricing = () => {
                         await refreshCredits();
                         setSuccess(`🎉 ${verifyRes.data.message} You now have ${verifyRes.data.credits} credits.`);
                     } catch {
-                        alert('Payment was received but verification failed. Please contact support with your payment ID: ' + response.razorpay_payment_id);
+                        addToast('Payment was received but verification failed. Please contact support with your payment ID: ' + response.razorpay_payment_id, 'error');
                     } finally {
                         setProcessingPack(null);
                     }
@@ -133,14 +135,14 @@ const Pricing = () => {
             // Handle payment failures with clear message
             razorpayInstance.on('payment.failed', (response) => {
                 console.error('Payment failed:', response.error);
-                alert(`Payment failed: ${response.error.description || 'Unknown error'}.\n\nIf using test mode, use card: 4111 1111 1111 1111, Expiry: any future date, CVV: any 3 digits.`);
+                addToast(`Payment failed: ${response.error.description || 'Unknown error'}.`, 'error');
                 setProcessingPack(null);
             });
 
             razorpayInstance.open();
         } catch (err) {
             console.error('Payment error:', err);
-            alert(err.response?.data?.message || 'Failed to initiate payment. Make sure the backend server is running.');
+            addToast(err.response?.data?.message || 'Failed to initiate payment. Make sure the backend server is running.', 'error');
             setProcessingPack(null);
         }
     };

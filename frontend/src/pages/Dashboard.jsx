@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, FileText, Bot, Loader2, Coins, ShoppingCart, AlertTriangle, CheckCircle2, Zap, History, TrendingUp, Clock, BarChart2, ArrowRight } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuthContext } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { buildApiUrl } from '../lib/api';
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
@@ -23,6 +24,7 @@ const Dashboard = () => {
     const fileInputRef = useRef(null);
     const navigate = useNavigate();
     const { user, refreshCredits } = useAuthContext();
+    const { addToast } = useToast();
 
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
@@ -43,6 +45,7 @@ const Dashboard = () => {
                 setHistory(res.data);
             } catch (err) {
                 console.error('Error fetching history', err);
+                addToast('Failed to load interview history', 'error');
             } finally {
                 setLoadingHistory(false);
             }
@@ -74,7 +77,9 @@ const Dashboard = () => {
             setFile(null);
             setUploadSuccess(true);
         } catch (err) {
-            setError(err.response?.data?.message || 'Error uploading resume');
+            const msg = err.response?.data?.message || 'Error uploading resume';
+            setError(msg);
+            addToast(msg, 'error');
         } finally {
             setUploading(false);
         }
@@ -97,9 +102,13 @@ const Dashboard = () => {
             navigate(`/setup/${res.data.interviewId}`, { state: { interviewId: res.data.interviewId } });
         } catch (err) {
             if (err.response?.data?.code === 'NO_CREDITS') {
-                setError('No credits remaining. Please purchase a credit pack to continue.');
+                const msg = 'No credits remaining. Please purchase a credit pack to continue.';
+                setError(msg);
+                addToast(msg, 'error');
             } else {
-                setError(err.response?.data?.message || 'Error starting interview');
+                const msg = err.response?.data?.message || 'Error starting interview';
+                setError(msg);
+                addToast(msg, 'error');
             }
         } finally {
             setStarting(false);

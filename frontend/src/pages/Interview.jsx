@@ -112,6 +112,7 @@ const Interview = () => {
   const containerRef   = useRef(null);
   const timerRef       = useRef(null);
   const avatarVideoRef = useRef(null);
+  const handleNextRef  = useRef(null);
 
   const personaMeta = PERSONA_META[persona] || PERSONA_META.Technical;
   const PersonaIcon = personaMeta.icon;
@@ -179,7 +180,14 @@ const Interview = () => {
       setShowHint(false); setHint('');
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
-        setTimeLeft(prev => { if (prev <= 1) { clearInterval(timerRef.current); handleNext(); return 0; } return prev - 1; });
+        setTimeLeft(prev => { 
+          if (prev <= 1) { 
+            clearInterval(timerRef.current); 
+            if (handleNextRef.current) handleNextRef.current(); 
+            return 0; 
+          } 
+          return prev - 1; 
+        });
       }, 1000);
       return () => clearInterval(timerRef.current);
     }
@@ -187,20 +195,28 @@ const Interview = () => {
 
   // ── Speech recognition ───────────────────────────────────────────────────
   useEffect(() => {
+    let sr = null;
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SR();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.onresult = e => {
+      sr = new SR();
+      recognitionRef.current = sr;
+      sr.continuous = true;
+      sr.interimResults = true;
+      sr.onresult = e => {
         let final = '';
         for (let i = e.resultIndex; i < e.results.length; ++i)
           if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
         setAnswer(prev => prev + final);
       };
-      recognitionRef.current.onerror = () => setIsListening(false);
+      sr.onerror = () => setIsListening(false);
     }
-    return () => { recognitionRef.current?.stop(); };
+    return () => { 
+      if (sr) {
+        sr.stop();
+        sr.onresult = null;
+        sr.onerror = null;
+      }
+    };
   }, []);
 
   useEffect(() => { if (webcamRef.current && camStream) webcamRef.current.srcObject = camStream; }, [camStream]);
@@ -214,25 +230,24 @@ const Interview = () => {
   }, [currentIndex, questions]);
 
   // ── Camera & Face API ────────────────────────────────────────────────────
-  useEffect(() => {
-    const loadModels = async () => {
-      try {
-        const url = 'https://vladmandic.github.io/face-api/model/';
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(url),
-          faceapi.nets.faceExpressionNet.loadFromUri(url)
-        ]);
-        setFaceModelsLoaded(true);
-      } catch (err) {
-        console.error('Error loading face-api models', err);
-      }
-    };
-    loadModels();
-  }, []);
+  const loadFaceModels = async () => {
+    if (faceModelsLoaded) return;
+    try {
+      const url = 'https://vladmandic.github.io/face-api/model/';
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(url),
+        faceapi.nets.faceExpressionNet.loadFromUri(url)
+      ]);
+      setFaceModelsLoaded(true);
+    } catch (err) {
+      console.error('Error loading face-api models', err);
+    }
+  };
 
   const startWebcam = async () => {
     setCamLoading(true); setCamError('');
     try {
+      await loadFaceModels();
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
       streamRef.current = stream;
       setCamStream(stream); setCamEnabled(true);
@@ -244,7 +259,10 @@ const Interview = () => {
   const stopWebcam = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null; setCamStream(null); setCamEnabled(false);
-    if (trackingIntervalRef.current) clearInterval(trackingIntervalRef.current);
+    if (trackingIntervalRef.current) {
+        clearInterval(trackingIntervalRef.current);
+        trackingIntervalRef.current = null;
+    }
     setExpressions(null);
   }, []);
 
@@ -275,7 +293,7 @@ const Interview = () => {
   };
 
   // ── AI Hint ──────────────────────────────────────────────────────────────
-  const fetchHint = async () => {
+  const fetchHint = useCallback(async () => {
     if (hint) { setShowHint(true); return; }
     setHintLoading(true);
     const token = localStorage.getItem('token');
@@ -286,7 +304,7 @@ const Interview = () => {
       setHint(res.data.hint); setShowHint(true);
     } catch { setHint('Structure your answer with a clear intro, examples, and conclusion.'); setShowHint(true); }
     finally { setHintLoading(false); }
-  };
+  }, [hint, questions, currentIndex]);
 
   // ── Adaptive "Panic" Detection ──────────────────────────────────────────
   useEffect(() => {
@@ -300,7 +318,7 @@ const Interview = () => {
         fetchHint();
       }
     }
-  }, [answer, isListening, showHint, hintLoading, tab]);
+  }, [answer, isListening, showHint, hintLoading, tab, fetchHint]);
 
   // ── Adaptive Follow-up ────────────────────────────────────────────────────
   const requestFollowUp = async () => {
@@ -346,21 +364,27 @@ const Interview = () => {
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
-  const handleNext = async () => {
+  const handleNext = useCallback(async () => {
     if (isListening) toggleListening();
     if (timerRef.current) clearInterval(timerRef.current);
     setSubmitting(true);
     const token = localStorage.getItem('token');
     const finalAnswer = tab === 'code' ? `[Code Submission]\n${userCode}` : answer;
     try {
-      await axios.post(buildApiUrl('/api/interview/answer'), {
+      const res = await axios.post(buildApiUrl('/api/interview/answer'), {
         questionId: questions[currentIndex]._id,
         answer: finalAnswer || 'No answer provided',
         userCode: tab === 'code' ? userCode : ''
       }, { headers: { Authorization: `Bearer ${token}` } });
 
+      const evaluation = res.data.evaluation || {};
+      
       // Add to local memory
-      setMemory(prev => [...prev, { q: questions[currentIndex].questionText.substring(0, 60) + '…', summary: finalAnswer.substring(0, 80) + '…' }]);
+      setMemory(prev => [...prev, { 
+        q: questions[currentIndex].questionText.substring(0, 60) + '…', 
+        summary: finalAnswer.substring(0, 80) + '…',
+        scores: [evaluation.technicalScore || 0, evaluation.clarityScore || 0, evaluation.problemSolvingScore || 0]
+      }]);
 
       if (currentIndex < questions.length - 1) {
         setCurrentIndex(prev => prev + 1);
@@ -371,7 +395,11 @@ const Interview = () => {
       }
     } catch { setError('Failed to submit. Please try again.'); }
     finally { setSubmitting(false); }
-  };
+  }, [isListening, answer, userCode, tab, questions, currentIndex, stopWebcam]);
+
+  useEffect(() => {
+    handleNextRef.current = handleNext;
+  }, [handleNext]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) containerRef.current?.requestFullscreen().then(() => setFullscreen(true)).catch(()=>{});
@@ -822,20 +850,23 @@ const Interview = () => {
             </h3>
             <p className="text-[10px] text-textMuted/60 italic">Scores appear after each submission</p>
             <p className="text-xs text-textMuted mt-2">Tracked per answer:</p>
-            {['Technical Accuracy', 'Communication Clarity', 'Problem Solving'].map((dim, i) => (
-              <div key={dim} className="mt-2">
-                <div className="flex justify-between text-[10px] text-textMuted mb-1">
-                  <span>{dim}</span>
-                  <span>Evaluated by AI</span>
+            {['Technical Accuracy', 'Communication Clarity', 'Problem Solving'].map((dim, i) => {
+              const latestScore = memory.length > 0 ? memory[memory.length - 1].scores[i] : 0;
+              return (
+                <div key={dim} className="mt-2">
+                  <div className="flex justify-between text-[10px] text-textMuted mb-1">
+                    <span>{dim}</span>
+                    <span>{latestScore > 0 ? `${latestScore}/100` : 'Evaluated by AI'}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <motion.div className="h-full rounded-full"
+                      style={{background: i===0?'#6366F1':i===1?'#10B981':'#F59E0B'}}
+                      animate={{width: `${latestScore}%`}}
+                      transition={{duration:1}} />
+                  </div>
                 </div>
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <motion.div className="h-full rounded-full"
-                    style={{background: i===0?'#6366F1':i===1?'#10B981':'#F59E0B'}}
-                    animate={{width: memory.length > 0 ? `${Math.random()*40+50}%` : '0%'}}
-                    transition={{duration:1}} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

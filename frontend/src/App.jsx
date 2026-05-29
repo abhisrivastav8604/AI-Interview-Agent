@@ -11,6 +11,7 @@ import Pricing from './pages/Pricing';
 import Profile from './pages/Profile';
 import PreInterviewSetup from './pages/PreInterviewSetup';
 import { AuthProvider, useAuthContext } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 
 const PrivateRoute = ({ children }) => {
     const { user, loading } = useAuthContext();
@@ -48,7 +49,9 @@ function AppRoutes() {
 function App() {
     return (
         <AuthProvider>
-            <AppRoutes />
+            <ToastProvider>
+                <AppRoutes />
+            </ToastProvider>
         </AuthProvider>
     );
 }

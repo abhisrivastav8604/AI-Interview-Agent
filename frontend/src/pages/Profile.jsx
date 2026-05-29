@@ -21,34 +21,16 @@ const Profile = () => {
     });
 
     useEffect(() => {
-        const fetchProfile = async () => {
-            setLoading(true);
-            try {
-                const token = localStorage.getItem('token');
-                const res = await axios.get(buildApiUrl('/api/auth/me'), {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                
-                const data = res.data;
-                setFormData({
-                    name: data.name || '',
-                    role: data.role || 'Software Engineer',
-                    skills: data.skills?.join(', ') || '',
-                    experience: data.experience || 'Fresher',
-                    bio: data.bio || ''
-                });
-                setUser({ ...user, ...data });
-            } catch (err) {
-                console.error('Error fetching profile', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         if (user) {
-            fetchProfile();
+            setFormData({
+                name: user.name || '',
+                role: user.role || 'Software Engineer',
+                skills: user.skills?.join(', ') || '',
+                experience: user.experience || 'Fresher',
+                bio: user.bio || ''
+            });
         }
-    }, []);
+    }, [user]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });

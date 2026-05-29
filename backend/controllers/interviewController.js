@@ -53,9 +53,14 @@ exports.startInterview = async (req, res) => {
 // ── Get Questions ─────────────────────────────────────────────────────────
 exports.getQuestions = async (req, res) => {
   try {
+    const interview = await Interview.findById(req.params.interviewId);
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    if (interview.userId.toString() !== req.user.userId) return res.status(403).json({ message: 'Unauthorized access' });
+
     const questions = await Question.find({ interviewId: req.params.interviewId }).sort({ order: 1 });
     res.json(questions);
   } catch (err) {
+    console.error('getQuestions error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -66,6 +71,11 @@ exports.submitAnswer = async (req, res) => {
     const { questionId, answer, userCode } = req.body;
     const question = await Question.findById(questionId);
     if (!question) return res.status(404).json({ message: 'Question not found' });
+
+    const interview = await Interview.findById(question.interviewId);
+    if (!interview || interview.userId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Unauthorized access' });
+    }
 
     // Run sentiment analysis (fast, no Gemini call)
     const sentiment = await analyzeSentiment(answer);
@@ -109,6 +119,10 @@ exports.getFollowUp = async (req, res) => {
     if (!question) return res.status(404).json({ message: 'Question not found' });
 
     const interview = await Interview.findById(question.interviewId);
+    if (!interview || interview.userId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Unauthorized access' });
+    }
+
     const followUpData = await generateFollowUp(
       question.questionText, answer, interview.contextualMemory || []
     );
@@ -136,6 +150,9 @@ exports.getFollowUp = async (req, res) => {
 exports.getReport = async (req, res) => {
   try {
     const interview = await Interview.findById(req.params.interviewId).populate('resumeId');
+    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    if (interview.userId.toString() !== req.user.userId) return res.status(403).json({ message: 'Unauthorized access' });
+
     const questions = await Question.find({ interviewId: req.params.interviewId }).sort({ order: 1 });
 
     const answered = questions.filter(q => q.userAnswer);
@@ -209,6 +226,12 @@ exports.getHint = async (req, res) => {
   try {
     const question = await Question.findById(req.params.questionId);
     if (!question) return res.status(404).json({ message: 'Question not found' });
+    
+    const interview = await Interview.findById(question.interviewId);
+    if (!interview || interview.userId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Unauthorized access' });
+    }
+
     const hint = await getQuestionHint(question.questionText);
     res.json({ hint });
   } catch (err) {

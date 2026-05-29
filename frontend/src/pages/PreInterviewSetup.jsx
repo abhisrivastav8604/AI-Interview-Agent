@@ -40,7 +40,9 @@ const CheckItem = ({ label, status }) => {
   const icon = status === 'checking' ? <Loader2 className="w-4 h-4 animate-spin text-yellow-400" />
     : status === 'ok'    ? <CheckCircle className="w-4 h-4 text-emerald-400" />
     : status === 'error' ? <XCircle className="w-4 h-4 text-red-400" />
+    : status === 'idle'  ? <div className="w-4 h-4 rounded-full border-2 border-white/20" />
     : <div className="w-4 h-4 rounded-full border-2 border-white/20" />;
+    
   const color = status === 'ok' ? 'text-emerald-400' : status === 'error' ? 'text-red-400' : status === 'checking' ? 'text-yellow-400' : 'text-textMuted';
   return (
     <div className="flex items-center gap-3 py-2">
@@ -66,6 +68,8 @@ const PreInterviewSetup = () => {
 
   const [selectedPersona, setSelectedPersona] = useState('Technical');
   const [step, setStep] = useState('persona'); // persona | checks
+  const [isContinuing, setIsContinuing] = useState(false);
+  
   const [camStatus, setCamStatus]     = useState('idle');
   const [micStatus, setMicStatus]     = useState('idle');
   const [browserStatus, setBrowserStatus] = useState('idle');
@@ -76,6 +80,7 @@ const PreInterviewSetup = () => {
   const videoRef  = useRef(null);
   const streamRef = useRef(null);
   const micAnimRef= useRef(null);
+  const audioCtxRef = useRef(null);
 
   useEffect(() => {
     const t = setInterval(() => setTipIndex(i => (i + 1) % TIPS.length), 3500);
@@ -93,14 +98,34 @@ const PreInterviewSetup = () => {
   const cleanup = () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     if (micAnimRef.current) cancelAnimationFrame(micAnimRef.current);
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(console.error);
+    }
   };
 
   const runChecks = async () => {
+    setIsContinuing(true);
+    await new Promise(r => setTimeout(r, 600)); // slight delay for UX
     setStep('checks');
+    setIsContinuing(false);
+    
     setBrowserStatus('checking');
     await new Promise(r => setTimeout(r, 400));
     setBrowserStatus(!!(navigator.mediaDevices?.getUserMedia) ? 'ok' : 'error');
 
+    // Only query permissions, do NOT call getUserMedia here
+    try {
+      const camPerm = await navigator.permissions.query({ name: 'camera' });
+      const micPerm = await navigator.permissions.query({ name: 'microphone' });
+      setCamStatus(camPerm.state === 'granted' ? 'ok' : camPerm.state === 'denied' ? 'error' : 'idle');
+      setMicStatus(micPerm.state === 'granted' ? 'ok' : micPerm.state === 'denied' ? 'error' : 'idle');
+    } catch (e) {
+      setCamStatus('idle');
+      setMicStatus('idle');
+    }
+  };
+
+  const testHardware = async () => {
     setCamStatus('checking');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -112,8 +137,18 @@ const PreInterviewSetup = () => {
     setMicStatus('checking');
     try {
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      
+      // Store reference to mic stream for cleanup
+      if (!streamRef.current) {
+        streamRef.current = micStream;
+      } else {
+        micStream.getTracks().forEach(t => streamRef.current.addTrack(t));
+      }
+
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx();
+      audioCtxRef.current = ctx;
+
       const analyser = ctx.createAnalyser();
       ctx.createMediaStreamSource(micStream).connect(analyser);
       analyser.fftSize = 256;
@@ -199,13 +234,14 @@ const PreInterviewSetup = () => {
             <div className="flex justify-center">
               <motion.button
                 onClick={runChecks}
+                disabled={isContinuing}
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                className={`py-4 px-12 rounded-2xl font-bold text-lg flex items-center gap-3 bg-gradient-to-r ${persona.color.replace('/20', '')} border ${persona.border} text-white shadow-xl`}
+                className={`py-4 px-12 rounded-2xl font-bold text-lg flex items-center gap-3 bg-gradient-to-r ${persona.color.replace('/20', '')} border ${persona.border} text-white shadow-xl ${isContinuing ? 'opacity-75 cursor-not-allowed' : ''}`}
                 style={{ background: 'linear-gradient(135deg, var(--tw-gradient-from), var(--tw-gradient-to))' }}
               >
-                <persona.icon className="w-6 h-6" />
-                Continue with {persona.label} Interview
-                <ArrowRight className="w-5 h-5" />
+                {isContinuing ? <Loader2 className="w-6 h-6 animate-spin" /> : <persona.icon className="w-6 h-6" />}
+                {isContinuing ? 'Preparing...' : `Continue with ${persona.label} Interview`}
+                {!isContinuing && <ArrowRight className="w-5 h-5" />}
               </motion.button>
             </div>
           </motion.div>
@@ -217,7 +253,14 @@ const PreInterviewSetup = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Camera Preview */}
               <div className="glass-panel p-6 flex flex-col gap-4">
-                <h3 className="font-bold flex items-center gap-2"><Camera className="w-5 h-5 text-primary" /> Camera Preview</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold flex items-center gap-2"><Camera className="w-5 h-5 text-primary" /> Camera Preview</h3>
+                  {camStatus !== 'ok' && camStatus !== 'checking' && (
+                    <button onClick={testHardware} className="text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-3 py-1.5 rounded-lg transition-colors">
+                      Test Camera/Mic
+                    </button>
+                  )}
+                </div>
                 <div className="w-full rounded-2xl overflow-hidden bg-black/60 border border-white/10 relative" style={{ aspectRatio: '4/3' }}>
                   {camStatus === 'ok' ? (
                     <>
@@ -234,12 +277,12 @@ const PreInterviewSetup = () => {
                     </div>
                   ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                      <CameraOff className="w-12 h-12 text-red-400" />
-                      <p className="text-xs text-textMuted text-center px-4">Camera unavailable — you can still take the interview without it</p>
+                      <CameraOff className="w-12 h-12 text-textMuted/50" />
+                      <p className="text-xs text-textMuted text-center px-4">Click "Test Camera/Mic" to preview, or proceed without it.</p>
                     </div>
                   )}
                 </div>
-                {micStatus === 'ok' && (
+                {(micStatus === 'ok' || micStatus === 'checking') && (
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
                       <Mic className="w-4 h-4 text-secondary" />
@@ -269,8 +312,8 @@ const PreInterviewSetup = () => {
                   <h3 className="font-bold mb-3 flex items-center gap-2"><CheckCircle className="w-5 h-5 text-secondary" /> System Checks</h3>
                   <div className="divide-y divide-white/5">
                     <CheckItem label="Browser supports WebRTC" status={browserStatus} />
-                    <CheckItem label="Camera accessible" status={camStatus} />
-                    <CheckItem label="Microphone accessible" status={micStatus} />
+                    <CheckItem label="Camera access (Optional)" status={camStatus} />
+                    <CheckItem label="Microphone access (Optional)" status={micStatus} />
                     <CheckItem label="Speech recognition" status={typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) ? 'ok' : 'error'} />
                   </div>
                   {anyError && (
