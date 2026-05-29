@@ -128,6 +128,22 @@ const Pricing = () => {
                 prefill: { email: user.email, name: user.name },
                 theme: { color: '#6366f1' },
                 modal: { ondismiss: () => setProcessingPack(null) },
+                // ✅ Enable all UPI flows: UPI ID (VPA), QR Code, and Intent (app-based)
+                config: {
+                    display: {
+                        blocks: {
+                            upi_block: {
+                                name: 'Pay via UPI',
+                                instruments: [
+                                    { method: 'upi', flows: ['vpa', 'qr', 'intent'] }
+                                ]
+                            }
+                        },
+                        preferences: {
+                            show_default_blocks: true
+                        }
+                    }
+                }
             };
 
             const razorpayInstance = new window.Razorpay(options);
